@@ -60,7 +60,7 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
 
 base_root = '/media/Data/RCF_output'
 data_root = '/media/Data/RCF_output/fmriprep'
-out_root = '/media/Data/work/RCF'
+out_root = '/media/Data/work/RCF9'
 
 
 MatlabCommand.set_default_paths('/home/nachshon/Documents/MATLAB/spm12/') # set default SPM12 path in my computer. 
@@ -70,20 +70,27 @@ data_dir = data_root
 output_dir = os.path.join(out_root, 'imaging')
 work_dir = os.path.join(out_root, 'work') # intermediate products
 
-subject_list = ['1268']
+subject_list = ['030' , '1005', '1072', '1074', '1099', '1205', '1206',
+ '1210', '1212', '1216', '1218', '1220', '1221', '1223', '1237', 
+ '1245', '1247', '1254', '1258', '1266', '1268', '1269', '1271',
+ '1272', '1280', '1290', '1291', '1301', '1303', '1309', '1312',
+ '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345',
+ '1346', '1347', '1350', '1357', '1359', '1362', '1374', '1376',
+ '1378', '1379', '1384', '1388', '1389', '1392', '1393', '1423',
+ '1423', '1431', '1440', '1444', '1445', '1449', '1457', '1460']
 
 fwhm = 6 # smotthing paramater
 tr = 1 # in seconds
-removeTR = 4 
+removeTR = 9 
 
 
 infosource = pe.Node(util.IdentityInterface(fields=['subject_id'],),
                   name="infosource")
 infosource.iterables = [('subject_id', subject_list)]    
 
-templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
-             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
-             'regressors': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_desc-confounds_regressors.tsv'),
+templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task50*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
+             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task50*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
+             'regressors': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task50*_desc-confounds_regressors.tsv'),
              'events': os.path.join(out_root, 'event_files', 'sub-{subject_id}.csv')}
 
 # Flexibly collect data from disk to feed into flows.
@@ -125,7 +132,7 @@ extract.inputs.output_type='NIFTI'
 smooth = Node(spm.Smooth(), name="smooth", fwhm = fwhm)
 
 # set contrasts, depend on the condition
-cond_names = ['CSAplus', 'CSBplus', 'CSAplusUS', 'CSBplusUS', 'CSminus']
+cond_names = ['Aplus', 'Bplus', 'US_Aplus', 'US_Bplus', 'minus']
 
 cont1 = ('CS', 'T', cond_names, [1, 1, 0, 0, 1])
 cont2 = ('P>M', 'T', cond_names, [0.5, 0.5, 0, 0, -1])
@@ -205,5 +212,5 @@ wfSPM.connect([
         ])
 
 #%% run
-wfSPM.run('MultiProc', plugin_args={'n_procs': 8})
+wfSPM.run('MultiProc', plugin_args={'n_procs': 14})
 # wfSPM.run('Linear', plugin_args={'n_procs': 1})
