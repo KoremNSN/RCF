@@ -63,36 +63,44 @@ data_root = '/media/Data/RCF_output/fmriprep'
 out_root = '/media/Data/work/RCF_or'
 
 
-MatlabCommand.set_default_paths('/home/or/Downloads/spm12/') # set default SPM12 path in my computer. 
+MatlabCommand.set_default_paths('/home/or/Downloads/spm12/') # set default SPM12 path in my computer.
 #fsl.FSLCommand.set_default_output_type('NIFTI_GZ')
 
 data_dir = data_root
 output_dir = os.path.join(out_root, 'imaging')
 work_dir = os.path.join(out_root, 'work') # intermediate products
 
-subject_list = ['029']
+subject_list = ['038', '1373', '1423']
+
+# ['020',	'1072',	'1210',	'1221',	'1247',	'1269',	'1291',	'1319',	'1340',	'1350',	'1374',
+#	'1388',	'1440',	'1460', '029' ,	'1074',	'1212',	'1223',	'1254',	'1271',	'1301',	'1320',	'1343',
+#	'1357',	'1376',	'1389',	'1444',	'1500', '030' ,	'1099',	'1216',	'1237',	'1258',	'1272',	'1303',
+#	'1326',	'1345',	'1359',	'1378',	'1392',	'1445', '038' ,	'1205',	'1218',	'1245',	'1266',	'1280',
+#	'1309',	'1337',	'1346',	'1362',	'1379',	'1393',	'1449', '1005',	'1206',	'1220',	'1246',	'1268',
+#	'1290',	'1312',	'1338',	'1347',	'1373',	'1384',	'1423',	'1457']
 
 fwhm = 6 # smotthing paramater
 tr = 1 # in seconds
 removeTR = 9
 lastTR = 496
 
+
 infosource = pe.Node(util.IdentityInterface(fields=['subject_id'],),
                   name="infosource")
-infosource.iterables = [('subject_id', subject_list)]    
+infosource.iterables = [('subject_id', subject_list)]
 
-templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
-             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
-             'regressors': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_desc-confounds_regressors.tsv'),
+templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
+             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
+             'regressors': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_desc-confounds_regressors.tsv'),
              'events': os.path.join(out_root, 'event_files', 'sub-{subject_id}.csv')}
 
 # Flexibly collect data from disk to feed into flows.
 selectfiles = pe.Node(nio.SelectFiles(templates,
                       base_directory=data_root),
                       name="selectfiles")
-        
+
 # selectfiles.inputs.task_id = ['556']  # task update after fixing the BDFconvert procedure
-        
+
 # Extract motion parameters from regressors file
 runinfo = pe.MapNode(util.Function(
     input_names=['in_file', 'events_file', 'regressors_file', 'regressors_names', 'motion_columns', 'removeTR'],
@@ -102,10 +110,10 @@ runinfo = pe.MapNode(util.Function(
 
 runinfo.inputs.removeTR = removeTR
 # Set the column names to be used from the confounds file
-        
+
 runinfo.inputs.regressors_names = ['std_dvars', 'framewise_displacement'] + \
                                    ['a_comp_cor_%02d' % i for i in range(6)]
-                                  
+
 
 # runinfo.inputs.motion_columns   = ['trans_x', 'trans_x_derivative1', 'trans_x_derivative1_power2', 'trans_x_power2'] + \
 #                                   ['trans_y', 'trans_y_derivative1', 'trans_y_derivative1_power2', 'trans_y_power2'] + \
@@ -115,9 +123,9 @@ runinfo.inputs.regressors_names = ['std_dvars', 'framewise_displacement'] + \
 #                                   ['rot_z', 'rot_z_derivative1', 'rot_z_derivative1_power2', 'rot_z_power2']
 
 
-#%%              
+#%%
 extract = pe.MapNode(fsl.ExtractROI(), name="extract", iterfield = ['in_file'])
-extract.inputs.t_min = removeTR 
+extract.inputs.t_min = removeTR
 extract.inputs.t_size = lastTR # set length of sacn
 extract.inputs.output_type='NIFTI'
 
@@ -131,16 +139,18 @@ cont1 = ('CS', 'T', cond_names, [1, 1, 0, 0, 1])
 cont2 = ('P>M', 'T', cond_names, [0.5, 0.5, 0, 0, -1])
 cont3 = ('shock', 'T', cond_names, [0, 0, 1, 1, 0])
 cont4 = ('stim', 'T', cond_names, [1, 1, 1, 1, 1])
+cont5 = ('CS2', 'T', cond_names, [.33, .33, 0, 0, .33])
+cont6 = ('stim2', 'T', cond_names, [.2, .2, .2, .2, .2])
 
-contrasts = [cont1, cont2, cont3, cont4]
+contrasts = [cont1, cont2, cont3, cont4, cont5, cont6]
 
 #%%
 
-modelspec = Node(interface=model.SpecifySPMModel(), name="modelspec") 
+modelspec = Node(interface=model.SpecifySPMModel(), name="modelspec")
 modelspec.inputs.concatenate_runs = False
 modelspec.inputs.input_units = 'secs' # supposedly it means tr
 modelspec.inputs.output_units = 'secs'
-modelspec.inputs.time_repetition = 1.  # make sure its with a dot 
+modelspec.inputs.time_repetition = 1.  # make sure its with a dot
 modelspec.inputs.high_pass_filter_cutoff = 128.
 
 level1design = pe.Node(interface=spm.Level1Design(), name="level1design") #, base_dir = '/media/Data/work')
@@ -157,7 +167,7 @@ wfSPM.connect([
         (selectfiles, extract, [('func','in_file')]),
         (extract, smooth, [('roi_file','in_files')]),
         (smooth, runinfo, [('smoothed_files','in_file')]),
-        (smooth, modelspec, [('smoothed_files', 'functional_runs')]),   
+        (smooth, modelspec, [('smoothed_files', 'functional_runs')]),
         (runinfo, modelspec, [('info', 'subject_info'), ('realign_file', 'realignment_parameters')]),
         ])
 wfSPM.connect([(modelspec, level1design, [("session_info", "session_info")])])
@@ -168,8 +178,8 @@ level1estimate.inputs.estimation_method = {'Classical': 1}
 
 contrastestimate = pe.Node(
     interface=spm.EstimateContrast(), name="contrastestimate")
-contrastestimate.inputs.contrasts = contrasts                                                   
-                                                   
+contrastestimate.inputs.contrasts = contrasts
+
 
 wfSPM.connect([
          (level1design, level1estimate, [('spm_mat_file','spm_mat_file')]),
@@ -182,7 +192,7 @@ wfSPM.connect([
 # Datasink
 datasink = Node(nio.DataSink(base_directory=os.path.join(output_dir, 'Sink_resp')),
                                          name="datasink")
-                       
+
 
 wfSPM.connect([
         (level1estimate, datasink, [('beta_images',  '1stLevel.@betas.@beta_images'),
@@ -192,10 +202,10 @@ wfSPM.connect([
                                     ('SDbetas', '1stLevel.@betas.@SDbetas'),
                 ])
         ])
-    
-    
+
+
 wfSPM.connect([
-       # here we take only the contrast ad spm.mat files of each subject and put it in different folder. It is more convenient like that. 
+       # here we take only the contrast ad spm.mat files of each subject and put it in different folder. It is more convenient like that.
        (contrastestimate, datasink, [('spm_mat_file', '1stLevel.@spm_mat'),
                                               ('spmT_images', '1stLevel.@T'),
                                               ('con_images', '1stLevel.@con'),
