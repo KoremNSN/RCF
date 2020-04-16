@@ -21,7 +21,7 @@ from nipype.interfaces import fsl
 def _bids2nipypeinfo(in_file, events_file, regressors_file,
                      regressors_names=None,
                      motion_columns=None,
-                     decimals=3, amplitude=1.0, removeTR = 4):
+                     decimals=3, amplitude=1.0, removeTR=4, lastTR=496):
     from pathlib import Path
     import numpy as np
     import pandas as pd
@@ -34,7 +34,7 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         motion_columns = ['_'.join(v) for v in product(('trans', 'rot'), 'xyz')]
     out_motion = Path('motion.par').resolve()
     regress_data = pd.read_csv(regressors_file, sep=r'\s+')
-    np.savetxt(out_motion, regress_data[motion_columns].values[removeTR:,], '%g')
+    np.savetxt(out_motion, regress_data[motion_columns].values[removeTR:lastTR+removeTR,], '%g')
     if regressors_names is None:
         regressors_names = sorted(set(regress_data.columns) - set(motion_columns))
     if regressors_names:
@@ -54,7 +54,7 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
             runinfo.amplitudes.append([amplitude] * len(event))
     if 'regressor_names' in bunch_fields:
         runinfo.regressor_names = regressors_names
-        runinfo.regressors = regress_data[regressors_names].fillna(0.0).values[removeTR:,].T.tolist() # adding removeTR to cut the first rows
+        runinfo.regressors = regress_data[regressors_names].fillna(0.0).values[removeTR:lastTR+ removeTR,].T.tolist() # adding removeTR to cut the first rows
     return runinfo, str(out_motion)
 #%%
 
@@ -70,27 +70,28 @@ data_dir = data_root
 output_dir = os.path.join(out_root, 'imaging')
 work_dir = os.path.join(out_root, 'work') # intermediate products
 
-subject_list = ['030' , '1005', '1072', '1074', '1099', '1205', '1206',
- '1210', '1212', '1216', '1218', '1220', '1221', '1223', '1237', 
- '1245', '1247', '1254', '1258', '1266', '1268', '1269', '1271',
- '1272', '1280', '1290', '1291', '1301', '1303', '1309', '1312',
- '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345',
- '1346', '1347', '1350', '1357', '1359', '1362', '1374', '1376',
- '1378', '1379', '1384', '1388', '1389', '1392', '1393', '1423',
- '1423', '1431', '1440', '1444', '1445', '1449', '1457', '1460']
+subject_list = ['038', '1373', '1423']
+
+# ['020',	'1072',	'1210',	'1221',	'1247',	'1269',	'1291',	'1319',	'1340',	'1350',	'1374',
+#	'1388',	'1440',	'1460', '029' ,	'1074',	'1212',	'1223',	'1254',	'1271',	'1301',	'1320',	'1343',
+#	'1357',	'1376',	'1389',	'1444',	'1500', '030' ,	'1099',	'1216',	'1237',	'1258',	'1272',	'1303',
+#	'1326',	'1345',	'1359',	'1378',	'1392',	'1445', '038' ,	'1205',	'1218',	'1245',	'1266',	'1280',
+#	'1309',	'1337',	'1346',	'1362',	'1379',	'1393',	'1449', '1005',	'1206',	'1220',	'1246',	'1268',	
+#	'1290',	'1312',	'1338',	'1347',	'1373',	'1384',	'1423',	'1457']
 
 fwhm = 6 # smotthing paramater
 tr = 1 # in seconds
 removeTR = 9 
+lastTR = 496
 
 
 infosource = pe.Node(util.IdentityInterface(fields=['subject_id'],),
                   name="infosource")
 infosource.iterables = [('subject_id', subject_list)]    
 
-templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task50*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
-             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task50*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
-             'regressors': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task50*_desc-confounds_regressors.tsv'),
+templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
+             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
+             'regressors': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_desc-confounds_regressors.tsv'),
              'events': os.path.join(out_root, 'event_files', 'sub-{subject_id}.csv')}
 
 # Flexibly collect data from disk to feed into flows.
@@ -125,7 +126,7 @@ runinfo.inputs.regressors_names = ['std_dvars', 'framewise_displacement'] + \
 #%%              
 extract = pe.MapNode(fsl.ExtractROI(), name="extract", iterfield = ['in_file'])
 extract.inputs.t_min = removeTR 
-extract.inputs.t_size = -1
+extract.inputs.t_size = lastTR
 extract.inputs.output_type='NIFTI'
 
 # smoothing
@@ -138,8 +139,10 @@ cont1 = ('CS', 'T', cond_names, [1, 1, 0, 0, 1])
 cont2 = ('P>M', 'T', cond_names, [0.5, 0.5, 0, 0, -1])
 cont3 = ('shock', 'T', cond_names, [0, 0, 1, 1, 0])
 cont4 = ('stim', 'T', cond_names, [1, 1, 1, 1, 1])
+cont5 = ('CS2', 'T', cond_names, [.33, .33, 0, 0, .33])
+cont6 = ('stim2', 'T', cond_names, [.2, .2, .2, .2, .2])
 
-contrasts = [cont1, cont2, cont3, cont4]
+contrasts = [cont1, cont2, cont3, cont4, cont5, cont6]
 
 #%%
 
