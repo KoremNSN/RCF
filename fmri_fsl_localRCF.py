@@ -48,7 +48,7 @@ fwhm = 6
 tr = 1
 removeTR = 9#Number of TR's to remove before initiating the analysis
 lastTR = 496
-thr = 0.3 # scrubbing threshold
+thr = 0.5 # scrubbing threshold
 #%%
 
 
@@ -70,7 +70,7 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         motion_columns = ['_'.join(v) for v in product(('trans', 'rot'), 'xyz')]
     out_motion = Path('motion.par').resolve()
     regress_data = pd.read_csv(regressors_file, sep=r'\s+')
-    regress_data = scrub(regressors_file, thr)
+    regress_data , per = scrub(regressors_file, thr) # grab also per which will be saved as file
     np.savetxt(out_motion, regress_data[motion_columns].values[removeTR:lastTR+removeTR,], '%g')
     if regressors_names is None:
         regressors_names = sorted(set(regress_data.columns) - set(motion_columns))
@@ -92,9 +92,9 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
     if 'regressor_names' in bunch_fields:
         runinfo.regressor_names = regressors_names
         runinfo.regressors = regress_data[regressors_names].fillna(0.0).values[removeTR:lastTR+ removeTR,].T.tolist() # adding removeTR to cut the first rows
-    return runinfo, str(out_motion)
+    return runinfo, str(out_motion), per
 #%%
-subject_list = ['1005']#, '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223', '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269',   '1272', '1280', '1290', '1291','1301', '1303', '1309', '1312',  '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345', '1346', '1347','1350', '1357', '1359', '1362', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393',  '1431', '1440', '1444', '1445', '1449', '1457', '1460'] # bad subject '1271', multiple runs - '1423', '030',
+subject_list = ['1005', '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223', '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269',   '1272', '1280', '1290', '1291','1301', '1303', '1309', '1312',  '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345', '1346', '1347','1350', '1357', '1359', '1362', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393',  '1431', '1440', '1444', '1445', '1449', '1457', '1460'] # bad subject '1271', multiple runs - '1423', '030',
 # Map field names to individual subject runs.
 
 
@@ -121,7 +121,7 @@ selectfiles = pe.Node(nio.SelectFiles(templates,
 # Extract motion parameters from regressors file
 runinfo = pe.Node(util.Function(
     input_names=['in_file', 'events_file', 'regressors_file', 'regressors_names', 'removeTR', 'lastTR', 'thr'],
-    function=_bids2nipypeinfo, output_names=['info', 'realign_file']),
+    function=_bids2nipypeinfo, output_names=['info', 'realign_file', 'per']),
     name='runinfo')
 
 
@@ -134,6 +134,7 @@ runinfo.inputs.motion_columns   = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'ro
 runinfo.inputs.removeTR = removeTR
 runinfo.inputs.lastTR = lastTR
 runinfo.inputs.thr = thr # set threshold of scrubbing
+
 #%%
 skip = pe.Node(interface=fsl.ExtractROI(), name = 'skip') 
 skip.inputs.t_min = removeTR
