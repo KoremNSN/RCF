@@ -11,11 +11,15 @@ def scrub(file, thr=0.3):
         if fd>thr:
             x[i] = 1
             x[i-1] = 1
-            x[i+1] = 1
+            try:
+                x[i+1] = 1
+            except:
+                print('out of bound')
+           
         else:
             continue
-    per= np.array([sum(x)/len(x)])
-    np.savetxt('percentScrub.txt',per) # saving percentage of scrubbing to txt file so we can track it
+    per = sum(x)/len(x)
+   # np.savetxt('percentScrub.txt',per) # saving percentage of scrubbing to txt file so we can track it
     regressor['scrub'] = x
-    return regressor
+    return regressor , per
     #regressor.to_csv(file, sep='\t', index=False)
