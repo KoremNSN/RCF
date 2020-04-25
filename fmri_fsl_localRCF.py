@@ -48,6 +48,7 @@ fwhm = 6
 tr = 1
 removeTR = 9#Number of TR's to remove before initiating the analysis
 lastTR = 496
+thr = 0.3 # scrubbing threshold
 #%%
 
 
@@ -55,10 +56,11 @@ lastTR = 496
 def _bids2nipypeinfo(in_file, events_file, regressors_file,
                      regressors_names=None,
                      motion_columns=None,
-                     decimals=3, amplitude=1.0, removeTR=4, lastTR=496):
+                     decimals=3, amplitude=1.0, removeTR=4, lastTR=496, thr=0.3):
     from pathlib import Path
     import numpy as np
     import pandas as pd
+    from scrubFunc import scrub
     from nipype.interfaces.base.support import Bunch
     # Process the events file
     events = pd.read_csv(events_file)
@@ -68,6 +70,7 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         motion_columns = ['_'.join(v) for v in product(('trans', 'rot'), 'xyz')]
     out_motion = Path('motion.par').resolve()
     regress_data = pd.read_csv(regressors_file, sep=r'\s+')
+    regress_data = scrub(regressors_file, thr)
     np.savetxt(out_motion, regress_data[motion_columns].values[removeTR:lastTR+removeTR,], '%g')
     if regressors_names is None:
         regressors_names = sorted(set(regress_data.columns) - set(motion_columns))
@@ -91,7 +94,7 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         runinfo.regressors = regress_data[regressors_names].fillna(0.0).values[removeTR:lastTR+ removeTR,].T.tolist() # adding removeTR to cut the first rows
     return runinfo, str(out_motion)
 #%%
-subject_list = ['030', '1005', '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223', '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269', '1271',  '1272', '1280', '1290', '1291','1301', '1303', '1309', '1312',  '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345', '1346', '1347','1350', '1357', '1359', '1362', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393', '1423', '1431', '1440', '1444', '1445', '1449', '1457', '1460']
+subject_list = ['1005']#, '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223', '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269',   '1272', '1280', '1290', '1291','1301', '1303', '1309', '1312',  '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345', '1346', '1347','1350', '1357', '1359', '1362', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393',  '1431', '1440', '1444', '1445', '1449', '1457', '1460'] # bad subject '1271', multiple runs - '1423', '030',
 # Map field names to individual subject runs.
 
 
@@ -106,7 +109,7 @@ infosource.iterables = [('subject_id', subject_list)]
 templates = {'func': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
              'mask': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
              'regressors': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_desc-confounds_regressors.tsv'),
-             'events': os.path.join('/media/Data/work/RCF9', 'event_files', 'sub-{subject_id}.csv')}
+             'events': os.path.join('/media/Data/work/RCF_or', 'event_files', 'sub-{subject_id}.csv')}
 
 
 selectfiles = pe.Node(nio.SelectFiles(templates,
@@ -117,17 +120,20 @@ selectfiles = pe.Node(nio.SelectFiles(templates,
 
 # Extract motion parameters from regressors file
 runinfo = pe.Node(util.Function(
-    input_names=['in_file', 'events_file', 'regressors_file', 'regressors_names', 'removeTR', 'lastTR'],
+    input_names=['in_file', 'events_file', 'regressors_file', 'regressors_names', 'removeTR', 'lastTR', 'thr'],
     function=_bids2nipypeinfo, output_names=['info', 'realign_file']),
     name='runinfo')
 
+
 # Set the column names to be used from the confounds file
-runinfo.inputs.regressors_names = ['std_dvars', 'framewise_displacement', 'rot_x','rot_y','rot_z','trans_x','trans_y','trans_z'] + \
+runinfo.inputs.regressors_names = ['std_dvars', 'framewise_displacement', 'scrub'] + \
                                    ['a_comp_cor_%02d' % i for i in range(6)]
 
+runinfo.inputs.motion_columns   = ['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z']
 
 runinfo.inputs.removeTR = removeTR
 runinfo.inputs.lastTR = lastTR
+runinfo.inputs.thr = thr # set threshold of scrubbing
 #%%
 skip = pe.Node(interface=fsl.ExtractROI(), name = 'skip') 
 skip.inputs.t_min = removeTR
@@ -169,16 +175,18 @@ level1design = pe.Node(interface=fsl.Level1Design(), name="level1design")
 
 
 # set contrasts, depend on the condition
-cond_names = ['Aplus', 'Bplus', 'US_Aplus', 'US_Bplus', 'minus']
+cond_names = ['Aplus1','Bplus1','US_Bplus1','US_Aplus1', 'minus1', 'Aplus2','Bplus2','US_Bplus2','US_Aplus2', 'minus2']
 
-cont1 = ('CS', 'T', cond_names, [1, 1, 0, 0, 1])
-cont2 = ('P>M', 'T', cond_names, [0.5, 0.5, 0, 0, -1])
-cont3 = ('shock', 'T', cond_names, [0, 0, 1, 1, 0])
-cont4 = ('stim', 'T', cond_names, [1, 1, 1, 1, 1])
-cont5 = ('CS2', 'T', cond_names, [.33, .33, 0, 0, .33])
-cont6 = ('stim2', 'T', cond_names, [.2, .2, .2, .2, .2])
+cont1 = ('stim', 'T', cond_names, [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+cont2 = ('P>M', 'T', cond_names, [0.125, 0.125, 0.125, 0.125, -0.5, 0.125, 0.125, 0.125, 0.125, -0.5])
+cont3 = ('shock_general', 'T', cond_names, [0, 0, 0.25, 0.25, 0, 0, 0, 0.25, 0.25, 0])
+cont4 = ('Shock_NoShockGeneral', 'T', cond_names, [-0.25, -0.25, 0.25, 0.25, 0, -0.25, -0.25, 0.25, 0.25, 0])
+cont5 = ('CSplus2>CSplus1', 'T', cond_names, [-0.25, -0.25, -0.25, -0.25, 0, 0.25, 0.25, 0.25, 0.25, 0])
+cont6 = ('CSnoShock2 > CSnoshock1', 'T', cond_names, [-0.5, -0.5, 0, 0, 0, 0.5, 0.5, 0, 0, 0])
+cont7 = ('CSShock2 > CSshock1', 'T', cond_names, [0, 0, -0.5, -0.5, 0 , 0, 0, 0.5, 0.5, 0])
+cont8 = ('CSPlus2 > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 0.25, 0.25, 0.25, 0.25, -1])
 
-contrasts = [cont1, cont2, cont3, cont4, cont5, cont6]
+contrasts = [cont1, cont2, cont3, cont4, cont5, cont6, cont7, cont8]
 
 level1design.inputs.interscan_interval = tr
 level1design.inputs.bases = {'dgamma': {'derivs': False}}
@@ -227,5 +235,17 @@ modelfit.connect([
     
 ])
 
+#%% Adding data sink
+# Datasink
+datasink = pe.Node(nio.DataSink(base_directory=os.path.join(output_dir, 'Sink_resp')),
+                                         name="datasink")
+
+
+modelfit.connect([ 
+        (modelestimate, datasink, [('results_dir','1stLevel.@results')])
+
+
+
+])
 #%%
-modelfit.run('MultiProc', plugin_args={'n_procs': 8})
+modelfit.run('MultiProc', plugin_args={'n_procs': 10})
