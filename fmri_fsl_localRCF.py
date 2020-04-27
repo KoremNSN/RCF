@@ -6,7 +6,7 @@ Created on Wed Dec  4 14:29:06 2019
 
 @author: Or Duek
 1st level analysis using FSL output
-In this one we smooth using SUSAN, which takes longer. 
+In this one we smooth using SUSAN, which takes longer.
 """
 
 from __future__ import print_function
@@ -52,7 +52,7 @@ thr = 0.5 # scrubbing threshold
 #%%
 
 
-#%% Methods 
+#%% Methods
 def _bids2nipypeinfo(in_file, events_file, regressors_file,
                      regressors_names=None,
                      motion_columns=None,
@@ -93,8 +93,15 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         runinfo.regressor_names = regressors_names
         runinfo.regressors = regress_data[regressors_names].fillna(0.0).values[removeTR:lastTR+ removeTR,].T.tolist() # adding removeTR to cut the first rows
     return runinfo, str(out_motion), per
+
+def saveScrub(regressors_file, thr):
+
 #%%
-subject_list = ['1005', '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223', '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269',   '1272', '1280', '1290', '1291','1301', '1303', '1309', '1312',  '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345', '1346', '1347','1350', '1357', '1359', '1362', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393',  '1431', '1440', '1444', '1445', '1449', '1457', '1460'] # bad subject '1271', multiple runs - '1423', '030',
+subject_list = ['1005', '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223',
+ '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269',   '1272', '1280', '1290', '1291',
+ '1301', '1303', '1309', '1312',  '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345', '1346',
+  '1347','1350', '1357', '1359', '1362', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393',
+    '1431', '1440', '1444', '1445', '1449', '1457', '1460'] # bad subject '1271', multiple runs - '1423', '030',
 # Map field names to individual subject runs.
 
 
@@ -136,7 +143,7 @@ runinfo.inputs.lastTR = lastTR
 runinfo.inputs.thr = thr # set threshold of scrubbing
 
 #%%
-skip = pe.Node(interface=fsl.ExtractROI(), name = 'skip') 
+skip = pe.Node(interface=fsl.ExtractROI(), name = 'skip')
 skip.inputs.t_min = removeTR
 skip.inputs.t_size = lastTR
 
@@ -159,7 +166,7 @@ modelfit = pe.Workflow(name='fsl_fit', base_dir= output_dir)
 Use :class:`nipype.algorithms.modelgen.SpecifyModel` to generate design information.
 """
 
-modelspec = pe.Node(interface=model.SpecifyModel(),                  
+modelspec = pe.Node(interface=model.SpecifyModel(),
                     name="modelspec")
 
 modelspec.inputs.input_units = 'secs'
@@ -192,7 +199,7 @@ contrasts = [cont1, cont2, cont3, cont4, cont5, cont6, cont7, cont8]
 level1design.inputs.interscan_interval = tr
 level1design.inputs.bases = {'dgamma': {'derivs': False}}
 level1design.inputs.contrasts = contrasts
-level1design.inputs.model_serial_correlations = True    
+level1design.inputs.model_serial_correlations = True
 """
 Use :class:`nipype.interfaces.fsl.FEATModel` to generate a run specific mat
 file for use by FILMGLS
@@ -233,7 +240,7 @@ modelfit.connect([
     (selectfiles, mask, [('mask', 'mask_file')]),
     (mask, modelestimate, [('out_file','in_file')]),
     (modelgen, modelestimate, [('design_file', 'design_file'),('con_file', 'tcon_file'),('fcon_file','fcon_file')]),
-    
+
 ])
 
 #%% Adding data sink
@@ -242,7 +249,7 @@ datasink = pe.Node(nio.DataSink(base_directory=os.path.join(output_dir, 'Sink_re
                                          name="datasink")
 
 
-modelfit.connect([ 
+modelfit.connect([
         (modelestimate, datasink, [('results_dir','1stLevel.@results')])
 
 
