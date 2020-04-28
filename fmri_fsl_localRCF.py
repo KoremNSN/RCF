@@ -42,12 +42,12 @@ analysis. This will demonstrate how pre-defined workflows can be setup and
 shared across users, projects and labs.
 """
 #%%
-data_dir = os.path.abspath('/media/Data/RCF_output/fmriprep')
+data_dir = os.path.abspath('/media/Data/RCF/derivatives/fmriprep')
 output_dir = '/media/Data/work/RCF_or'
 fwhm = 6
 tr = 1
-removeTR = 9#Number of TR's to remove before initiating the analysis
-lastTR = 496
+removeTR = 5#Number of TR's to remove before initiating the analysis
+lastTR = 500
 thr = 0.5 # scrubbing threshold
 #%%
 
@@ -56,7 +56,7 @@ thr = 0.5 # scrubbing threshold
 def _bids2nipypeinfo(in_file, events_file, regressors_file,
                      regressors_names=None,
                      motion_columns=None,
-                     decimals=3, amplitude=1.0, removeTR=4, lastTR=496, thr=0.3):
+                     decimals=3, amplitude=1.0, removeTR=4, lastTR=496, thr=0.5):
     from pathlib import Path
     import numpy as np
     import pandas as pd
@@ -69,8 +69,8 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         from itertools import product
         motion_columns = ['_'.join(v) for v in product(('trans', 'rot'), 'xyz')]
     out_motion = Path('motion.par').resolve()
-    regress_data = pd.read_csv(regressors_file, sep=r'\s+')
-    regress_data , per = scrub(regressors_file, thr) # grab also per which will be saved as file
+    #regress_data = pd.read_csv(regressors_file, sep=r'\s+')
+    regress_data = scrub(regressors_file, thr) # grab also per which will be saved as file
     np.savetxt(out_motion, regress_data[motion_columns].values[removeTR:lastTR+removeTR,], '%g')
     if regressors_names is None:
         regressors_names = sorted(set(regress_data.columns) - set(motion_columns))
@@ -92,9 +92,21 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
     if 'regressor_names' in bunch_fields:
         runinfo.regressor_names = regressors_names
         runinfo.regressors = regress_data[regressors_names].fillna(0.0).values[removeTR:lastTR+ removeTR,].T.tolist() # adding removeTR to cut the first rows
-    return runinfo, str(out_motion), per
+    return runinfo, str(out_motion)
 
 def saveScrub(regressors_file, thr):
+    from pathlib import Path
+    import numpy as np
+    import pandas as pd
+    from scrubFunc import scrub
+    # this function will call scrub and save a file with precentage of scrubbed framewise_displacement
+    perFile = Path('percentScrub.txt').resolve()
+    regress_data = pd.read_csv(regressors_file, sep=r'\s+')
+    regress_data  = scrub(regressors_file, thr) # grab also per which will be saved as file
+    x = regress_data.scrub
+    per = np.array([sum(x)/len(x)])
+    np.savetxt(perFile, per, '%g')
+    return str(perFile)
 
 #%%
 subject_list = ['1005', '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223',
@@ -112,9 +124,8 @@ infosource = pe.Node(util.IdentityInterface(fields=['subject_id'
 infosource.iterables = [('subject_id', subject_list)]
 
 # SelectFiles - to grab the data (alternativ to DataGrabber)
-
-templates = {'func': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
-             'mask': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
+templates = {'func': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_res-2_desc-preproc_bold.nii.gz'),
+             'mask': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_res-2_desc-brain_mask.nii.gz'),
              'regressors': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_desc-confounds_regressors.tsv'),
              'events': os.path.join('/media/Data/work/RCF_or', 'event_files', 'sub-{subject_id}.csv')}
 
@@ -128,7 +139,7 @@ selectfiles = pe.Node(nio.SelectFiles(templates,
 # Extract motion parameters from regressors file
 runinfo = pe.Node(util.Function(
     input_names=['in_file', 'events_file', 'regressors_file', 'regressors_names', 'removeTR', 'lastTR', 'thr'],
-    function=_bids2nipypeinfo, output_names=['info', 'realign_file', 'per']),
+    function=_bids2nipypeinfo, output_names=['info', 'realign_file']),
     name='runinfo')
 
 
@@ -142,6 +153,13 @@ runinfo.inputs.removeTR = removeTR
 runinfo.inputs.lastTR = lastTR
 runinfo.inputs.thr = thr # set threshold of scrubbing
 
+## adding node for the saveScrub functions
+svScrub = pe.Node(util.Function(
+    input_names = ['regressors_file', 'thr'], output_names = ['perFile'],
+    function = saveScrub), name = 'svScrub'
+    )
+
+svScrub.inputs.thr = thr
 #%%
 skip = pe.Node(interface=fsl.ExtractROI(), name = 'skip')
 skip.inputs.t_min = removeTR
@@ -226,6 +244,7 @@ modelestimate = pe.MapNode(
 modelfit.connect([
     (infosource, selectfiles, [('subject_id', 'subject_id')]),
     (selectfiles, runinfo, [('events','events_file'),('regressors','regressors_file')]),
+    (selectfiles, svScrub, [('regressors', 'regressors_file')]),
     (selectfiles, skip,[('func','in_file')]),
     (skip,susan,[('roi_file','inputnode.in_files')]),
     (selectfiles, susan, [('mask','inputnode.mask_file')]),

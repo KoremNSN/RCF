@@ -21,11 +21,12 @@ from nipype.interfaces import fsl
 def _bids2nipypeinfo(in_file, events_file, regressors_file,
                      regressors_names=None,
                      motion_columns=None,
-                     decimals=3, amplitude=1.0, removeTR=4, lastTR=496):
+                     decimals=3, amplitude=1.0, removeTR=4, lastTR=496, thr=0.5):
     from pathlib import Path
     import numpy as np
     import pandas as pd
     from nipype.interfaces.base.support import Bunch
+    from scrubFunc import scrub
     # Process the events file
     events = pd.read_csv(events_file)
     bunch_fields = ['onsets', 'durations', 'amplitudes']
@@ -33,7 +34,8 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         from itertools import product
         motion_columns = ['_'.join(v) for v in product(('trans', 'rot'), 'xyz')]
     out_motion = Path('motion.par').resolve()
-    regress_data = pd.read_csv(regressors_file, sep=r'\s+')
+    #regress_data = pd.read_csv(regressors_file, sep=r'\s+')
+    regress_data = scrub(regressors_file, thr) # grab also per which will be saved as file
     np.savetxt(out_motion, regress_data[motion_columns].values[removeTR:lastTR+removeTR,], '%g')
     if regressors_names is None:
         regressors_names = sorted(set(regress_data.columns) - set(motion_columns))
@@ -56,10 +58,26 @@ def _bids2nipypeinfo(in_file, events_file, regressors_file,
         runinfo.regressor_names = regressors_names
         runinfo.regressors = regress_data[regressors_names].fillna(0.0).values[removeTR:lastTR+ removeTR,].T.tolist() # adding removeTR to cut the first rows
     return runinfo, str(out_motion)
+
+
+def saveScrub(regressors_file, thr):
+    from pathlib import Path
+    import numpy as np
+    import pandas as pd
+    from scrubFunc import scrub
+    # this function will call scrub and save a file with precentage of scrubbed framewise_displacement
+    perFile = Path('percentScrub.txt').resolve()
+    regress_data = pd.read_csv(regressors_file, sep=r'\s+')
+    regress_data  = scrub(regressors_file, thr) # grab also per which will be saved as file
+    x = regress_data.scrub
+    per = np.array([sum(x)/len(x)])
+    np.savetxt(perFile, per, '%g')
+    return str(perFile)
+
 #%%
 
-base_root = '/media/Data/RCF_output'
-data_root = '/media/Data/RCF_output/fmriprep'
+base_root = '/media/Data/RCF'
+data_root = '/media/Data/RCF/derivatives/fmriprep'
 out_root = '/media/Data/work/RCF_or'
 
 
@@ -70,7 +88,7 @@ data_dir = data_root
 output_dir = os.path.join(out_root, 'imaging')
 work_dir = os.path.join(out_root, 'work') # intermediate products
 
-subject_list = ['038', '1373', '1423']
+subject_list = ['038']#, '1373', '1423']
 
 # ['020',	'1072',	'1210',	'1221',	'1247',	'1269',	'1291',	'1319',	'1340',	'1350',	'1374',
 #	'1388',	'1440',	'1460', '029' ,	'1074',	'1212',	'1223',	'1254',	'1271',	'1301',	'1320',	'1343',
@@ -81,16 +99,16 @@ subject_list = ['038', '1373', '1423']
 
 fwhm = 6 # smotthing paramater
 tr = 1 # in seconds
-removeTR = 9
-lastTR = 496
-
+removeTR = 5
+lastTR = 500
+thr = 0.5 # set FD scrubbing threshold
 
 infosource = pe.Node(util.IdentityInterface(fields=['subject_id'],),
                   name="infosource")
 infosource.iterables = [('subject_id', subject_list)]
 
-templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz'),
-             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_desc-brain_mask.nii.gz'),
+templates = {'func': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_res-2_desc-preproc_bold.nii.gz'),
+             'mask': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_space-MNI152NLin2009cAsym_res-2_desc-brain_mask.nii.gz'),
              'regressors': os.path.join(data_root, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task5*_desc-confounds_regressors.tsv'),
              'events': os.path.join(out_root, 'event_files', 'sub-{subject_id}.csv')}
 
@@ -103,26 +121,35 @@ selectfiles = pe.Node(nio.SelectFiles(templates,
 
 # Extract motion parameters from regressors file
 runinfo = pe.MapNode(util.Function(
-    input_names=['in_file', 'events_file', 'regressors_file', 'regressors_names', 'motion_columns', 'removeTR'],
+    input_names=['in_file', 'events_file', 'regressors_file', 'regressors_names', 'motion_columns', 'removeTR','lastTR', 'thr'],
     function=_bids2nipypeinfo, output_names=['info', 'realign_file']),
     name='runinfo',
     iterfield = ['in_file', 'events_file', 'regressors_file'])
 
 runinfo.inputs.removeTR = removeTR
+runinfo.inputs.lastTR = lastTR
+runinfo.inputs.thr
 # Set the column names to be used from the confounds file
 
 runinfo.inputs.regressors_names = ['std_dvars', 'framewise_displacement'] + \
                                    ['a_comp_cor_%02d' % i for i in range(6)]
 
-
-# runinfo.inputs.motion_columns   = ['trans_x', 'trans_x_derivative1', 'trans_x_derivative1_power2', 'trans_x_power2'] + \
-#                                   ['trans_y', 'trans_y_derivative1', 'trans_y_derivative1_power2', 'trans_y_power2'] + \
+runinfo.inputs.motion_columns   = ['trans_x', 'trans_y','trans_z', 'rot_x', 'rot_y', 'rot_z']
+ # 'trans_x_derivative1', 'trans_x_derivative1_power2', 'trans_x_power2'] + \
+#                                   [ 'trans_y_derivative1', 'trans_y_derivative1_power2', 'trans_y_power2'] + \
 #                                   ['trans_z', 'trans_z_derivative1', 'trans_z_derivative1_power2', 'trans_z_power2'] + \
 #                                   ['rot_x', 'rot_x_derivative1', 'rot_x_derivative1_power2', 'rot_x_power2'] + \
 #                                   ['rot_y', 'rot_y_derivative1', 'rot_y_derivative1_power2', 'rot_y_power2'] + \
 #                                   ['rot_z', 'rot_z_derivative1', 'rot_z_derivative1_power2', 'rot_z_power2']
 
 
+
+svScrub = pe.Node(util.Function(
+    input_names = ['regressors_file', 'thr'], output_names = ['perFile'],
+    function = saveScrub), name = 'svScrub'
+    )
+
+svScrub.inputs.thr = thr
 #%%
 extract = pe.MapNode(fsl.ExtractROI(), name="extract", iterfield = ['in_file'])
 extract.inputs.t_min = removeTR
@@ -133,16 +160,18 @@ extract.inputs.output_type='NIFTI'
 smooth = Node(spm.Smooth(), name="smooth", fwhm = fwhm)
 
 # set contrasts, depend on the condition
-cond_names = ['CSAplus', 'CSBplus', 'CS_US_Aplus', 'CS_US_Bplus', 'CSminus']
+cond_names = ['Aplus1','Bplus1','US_Bplus1','US_Aplus1', 'minus1', 'Aplus2','Bplus2','US_Bplus2','US_Aplus2', 'minus2']
 
-cont1 = ('CS', 'T', cond_names, [1, 1, 0, 0, 1])
-cont2 = ('P>M', 'T', cond_names, [0.5, 0.5, 0, 0, -1])
-cont3 = ('shock', 'T', cond_names, [0, 0, 1, 1, 0])
-cont4 = ('stim', 'T', cond_names, [1, 1, 1, 1, 1])
-cont5 = ('CS2', 'T', cond_names, [.33, .33, 0, 0, .33])
-cont6 = ('stim2', 'T', cond_names, [.2, .2, .2, .2, .2])
+cont1 = ('stim', 'T', cond_names, [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+cont2 = ('P>M', 'T', cond_names, [0.125, 0.125, 0.125, 0.125, -0.5, 0.125, 0.125, 0.125, 0.125, -0.5])
+cont3 = ('shock_general', 'T', cond_names, [0, 0, 0.25, 0.25, 0, 0, 0, 0.25, 0.25, 0])
+cont4 = ('Shock_NoShockGeneral', 'T', cond_names, [-0.25, -0.25, 0.25, 0.25, 0, -0.25, -0.25, 0.25, 0.25, 0])
+cont5 = ('CSplus2>CSplus1', 'T', cond_names, [-0.25, -0.25, -0.25, -0.25, 0, 0.25, 0.25, 0.25, 0.25, 0])
+cont6 = ('CSnoShock2 > CSnoshock1', 'T', cond_names, [-0.5, -0.5, 0, 0, 0, 0.5, 0.5, 0, 0, 0])
+cont7 = ('CSShock2 > CSshock1', 'T', cond_names, [0, 0, -0.5, -0.5, 0 , 0, 0, 0.5, 0.5, 0])
+cont8 = ('CSPlus2 > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 0.25, 0.25, 0.25, 0.25, -1])
 
-contrasts = [cont1, cont2, cont3, cont4, cont5, cont6]
+contrasts = [cont1, cont2, cont3, cont4, cont5, cont6, cont7, cont8]
 
 #%%
 
@@ -164,6 +193,7 @@ wfSPM = Workflow(name="l1spm_resp", base_dir=work_dir)
 wfSPM.connect([
         (infosource, selectfiles, [('subject_id', 'subject_id')]),
         (selectfiles, runinfo, [('events','events_file'),('regressors','regressors_file')]),
+        (selectfiles, svScrub, [('regressors', 'regressors_file')]),
         (selectfiles, extract, [('func','in_file')]),
         (extract, smooth, [('roi_file','in_files')]),
         (smooth, runinfo, [('smoothed_files','in_file')]),
@@ -215,5 +245,5 @@ wfSPM.connect([
         ])
 
 #%% run
-wfSPM.run('MultiProc', plugin_args={'n_procs': 8})
+wfSPM.run('MultiProc', plugin_args={'n_procs': 10})
 # wfSPM.run('Linear', plugin_args={'n_procs': 1})
