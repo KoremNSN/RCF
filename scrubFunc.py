@@ -7,7 +7,7 @@ def scrub(file, thr=0.3):
     regressor = pd.read_csv(file, sep=r'\s+')
     x = np.zeros(len(regressor))
     for i, fd in enumerate(regressor.framewise_displacement.fillna(0)):
-        
+
         if fd>thr:
             x[i] = 1
             x[i-1] = 1
@@ -15,11 +15,11 @@ def scrub(file, thr=0.3):
                 x[i+1] = 1
             except:
                 print('out of bound')
-           
+
         else:
             continue
-    per = sum(x)/len(x)
+
    # np.savetxt('percentScrub.txt',per) # saving percentage of scrubbing to txt file so we can track it
     regressor['scrub'] = x
-    return regressor , per
+    return regressor
     #regressor.to_csv(file, sep='\t', index=False)
