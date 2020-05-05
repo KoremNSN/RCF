@@ -13,5 +13,6 @@ sub_list = []
 glober = '/media/Data/Lab_Projects/RCF/work/work/l1spm_resp/_subject_id_*/svScrub/percentScrub.txt'
 
 for f in glob.glob(glober):
-    with open(f) as df:
-        print("sub-"+f.split('/')[8].split("_")[-1] + " " + df.readlines()[0])
+    with open(f) as scrub:
+        
+        print(f.split('/')[8].split('_')[-1] + " " + scrub.readlines()[0])
