@@ -42,12 +42,12 @@ analysis. This will demonstrate how pre-defined workflows can be setup and
 shared across users, projects and labs.
 """
 #%%
-data_dir = os.path.abspath('/media/Data/RCF/derivatives/fmriprep')
+data_dir = os.path.abspath('/media/Data/Lab_Projects/RCF/derivatives/fmriprep')
 output_dir = '/media/Data/work/RCF_or'
 fwhm = 6
 tr = 1
-removeTR = 5#Number of TR's to remove before initiating the analysis
-lastTR = 500
+removeTR = 9#Number of TR's to remove before initiating the analysis
+lastTR = 496 # total number of frames in the scan, after removing removeTR (i.e. if we have a 500 frames scan and we removed 5 frames and the start of scan it should be 495, unless we also want to remove some from end of scan)
 thr = 0.5 # scrubbing threshold
 #%%
 
@@ -109,11 +109,11 @@ def saveScrub(regressors_file, thr):
     return str(perFile)
 
 #%%
-subject_list = ['1005', '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223',
- '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269',   '1272', '1280', '1290', '1291',
+subject_list = ['020','029','030','038','040', '1005', '1072', '1074', '1099', '1205', '1206', '1210', '1212', '1216', '1218', '1220', '1221','1223',
+ '1237',  '1245', '1247', '1254', '1258', '1266', '1268', '1269', '1271',  '1272', '1280', '1290', '1291',
  '1301', '1303', '1309', '1312',  '1319', '1320', '1326', '1337', '1338', '1340', '1343', '1345', '1346',
-  '1347','1350', '1357', '1359', '1362', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393',
-    '1431', '1440', '1444', '1445', '1449', '1457', '1460'] # bad subject '1271', multiple runs - '1423', '030',
+  '1347','1350', '1357', '1359', '1362','1373', '1374', '1376', '1378', '1379', '1384', '1388', '1389', '1392', '1393',
+     '1423','1431', '1432', '1440', '1444', '1445', '1449', '1457', '1460'] # bad subject '1271', multiple runs - '1423', '030',
 # Map field names to individual subject runs.
 
 
@@ -127,7 +127,7 @@ infosource.iterables = [('subject_id', subject_list)]
 templates = {'func': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_res-2_desc-preproc_bold.nii.gz'),
              'mask': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_res-2_desc-brain_mask.nii.gz'),
              'regressors': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_desc-confounds_regressors.tsv'),
-             'events': os.path.join('/media/Data/work/RCF_or', 'event_files', 'sub-{subject_id}.csv')}
+             'events': os.path.join('/media/Data/Lab_Projects/RCF', 'event_files','ses-1', 'sub-{subject_id}.csv')}
 
 
 selectfiles = pe.Node(nio.SelectFiles(templates,
@@ -211,8 +211,11 @@ cont5 = ('CSplus2>CSplus1', 'T', cond_names, [-0.25, -0.25, -0.25, -0.25, 0, 0.2
 cont6 = ('CSnoShock2 > CSnoshock1', 'T', cond_names, [-0.5, -0.5, 0, 0, 0, 0.5, 0.5, 0, 0, 0])
 cont7 = ('CSShock2 > CSshock1', 'T', cond_names, [0, 0, -0.5, -0.5, 0 , 0, 0, 0.5, 0.5, 0])
 cont8 = ('CSPlus2 > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 0.25, 0.25, 0.25, 0.25, -1])
+cont9 = ('CSPlus2NoShock > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 0.5, 0.5, 0, 0, -1])
+cont10 = ('CS_A_Plus2 > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 1, 0, 0, 0, -1])
+cont11 = ('CS_B_Plus2 > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 1, 0, 0, 0, -1])
 
-contrasts = [cont1, cont2, cont3, cont4, cont5, cont6, cont7, cont8]
+contrasts = [cont1, cont2, cont3, cont4, cont5, cont6, cont7, cont8, cont9, cont10, cont11]
 
 level1design.inputs.interscan_interval = tr
 level1design.inputs.bases = {'dgamma': {'derivs': False}}
