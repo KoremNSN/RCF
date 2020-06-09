@@ -42,7 +42,7 @@ analysis. This will demonstrate how pre-defined workflows can be setup and
 shared across users, projects and labs.
 """
 #%%
-data_dir = os.path.abspath('/media/Data/Lab_Projects/RCF/derivatives/fmriprep')
+data_dir = os.path.abspath('/media/Data/Lab_Projects/RCF/neuroimaging/RCF_Bids/derivatives/fmriprep')
 output_dir = '/media/Data/work/RCF_or'
 fwhm = 6
 tr = 1
@@ -127,7 +127,7 @@ infosource.iterables = [('subject_id', subject_list)]
 templates = {'func': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_res-2_desc-preproc_bold.nii.gz'),
              'mask': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_space-MNI152NLin2009cAsym_res-2_desc-brain_mask.nii.gz'),
              'regressors': os.path.join(data_dir, 'sub-{subject_id}', 'ses-1', 'func', 'sub-{subject_id}_ses-1_task-task*_desc-confounds_regressors.tsv'),
-             'events': os.path.join('/media/Data/Lab_Projects/RCF', 'event_files','ses-1', 'sub-{subject_id}.csv')}
+             'events': os.path.join('/media/Data/Lab_Projects/RCF/neuroimaging/RCF_Bids', 'event_files','ses-1', 'sub-{subject_id}.csv')}
 
 
 selectfiles = pe.Node(nio.SelectFiles(templates,
@@ -215,7 +215,16 @@ cont9 = ('CSPlus2NoShock > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 0.5, 0.5
 cont10 = ('CS_A_Plus2 > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 1, 0, 0, 0, -1])
 cont11 = ('CS_B_Plus2 > CSminus2', 'T', cond_names, [0, 0, 0, 0, 0 , 1, 0, 0, 0, -1])
 
-contrasts = [cont1, cont2, cont3, cont4, cont5, cont6, cont7, cont8, cont9, cont10, cont11]
+## Creating CS+ and CS- vs. baseline for analysis
+cont12 = ('CS_Plus2 > nothing', 'T', cond_names, [0, 0, 0, 0, 0 , 0.5, 0.5, 0, 0, 0])
+cont13 = ('CS_Minus2 > nothing', 'T', cond_names, [0, 0, 0, 0, 0 , 0, 0, 0, 0, 1])
+cont14 = ('CSA_Plus2 > nothing', 'T', cond_names, [0, 0, 0, 0, 0 , 1, 0, 0, 0, 0])
+cont15 = ('CSB_Plus2 > nothing', 'T', cond_names, [0, 0, 0, 0, 0 , 0, 1, 0, 0, 0])
+
+
+
+contrasts = [cont1, cont2, cont3, cont4, cont5, cont6, cont7, cont8, cont9, cont10, cont11,
+ cont12, cont13, cont14, cont15]
 
 level1design.inputs.interscan_interval = tr
 level1design.inputs.bases = {'dgamma': {'derivs': False}}
